@@ -9,7 +9,7 @@
     body { font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 15px; background: #f5f5f5; }
     .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     h2 { margin-top: 0; color: #333; text-align: center; }
-    #reader { width: 100%; border-radius: 8px; overflow: hidden; margin-bottom: 15px; }
+    #reader { width: 100%; border-radius: 8px; overflow: hidden; margin-bottom: 15px; background: #000; min-height: 200px; }
     .form-group { margin-bottom: 15px; }
     label { font-weight: bold; display: block; margin-bottom: 5px; }
     input[type="text"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
@@ -18,12 +18,16 @@
     #status { margin-top: 15px; font-weight: bold; text-align: center; padding: 10px; border-radius: 4px; display: none; }
     .success { background: #d4edda; color: #155724; }
     .error { background: #f8d7da; color: #721c24; }
+    .info { background: #e2e3e5; color: #383d41; }
+    /* 不要なファイル参照ボタンやカメラ選択UIを隠す */
+    #reader__filescan_input, #reader__dashboard_section_csr button { display: none !important; }
   </style>
 </head>
 <body>
   <div class="card">
     <h2>📚 DI室 書籍貸出</h2>
     
+    <!-- カメラ映像エリア -->
     <div id="reader"></div>
     
     <div class="form-group">
@@ -46,23 +50,33 @@
   </div>
 
   <script>
-    // ↓ 先ほどコピーしたGASのWebアプリURLに書き換えてください
-    const GAS_URL = "https://script.google.com/a/macros/marianna-u.ac.jp/s/AKfycbxWJF1N6p-kUwl8FCQ8HdbEuNkzT_BOkD2kxmGLKiVmQkJBrHER39GjAIt7pRoEiKoW2w/exec";
+    // ↓ ご自身のGASのWebアプリURLを設定してください
+    const GAS_URL = "ここにGASのWebアプリURLを貼り付け";
 
-    let html5QrcodeScanner;
+    let html5QrCode;
 
-    function onScanSuccess(decodedText, decodedResult) {
+    function onScanSuccess(decodedText) {
       document.getElementById("isbn").value = decodedText;
       searchBook(decodedText);
     }
 
-    // カメラの起動
-    window.onload = () => {
-      html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 150 } });
-      html5QrcodeScanner.render(onScanSuccess);
+    // 画面読み込み時に背面カメラ（facingMode: "environment"）を自動起動
+    window.onload = async () => {
+      html5QrCode = new Html5Qrcode("reader");
+      const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+      
+      try {
+        await html5QrCode.start(
+          { facingMode: "environment" }, // 背面カメラを固定指定
+          config,
+          onScanSuccess
+        );
+      } catch (err) {
+        showStatus("カメラの起動に失敗しました。アクセス許可を確認してください。", "error");
+      }
     };
 
-    // 手入力時・スキャン時の書籍検索
+    // ISBN入力・変更時の処理
     document.getElementById("isbn").addEventListener("change", (e) => searchBook(e.target.value));
 
     async function searchBook(isbn) {
