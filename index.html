@@ -6,87 +6,129 @@
   <title>DI室 書籍貸出システム</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    body { font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 15px; background: #f5f5f5; }
+    body { font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 10px; background: #f5f5f5; }
     .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    h2 { margin-top: 0; color: #333; text-align: center; }
-    #reader { width: 100%; border-radius: 8px; overflow: hidden; margin-bottom: 15px; background: #000; min-height: 200px; }
-    .form-group { margin-bottom: 15px; }
-    label { font-weight: bold; display: block; margin-bottom: 5px; }
+    h2 { margin-top: 0; color: #333; text-align: center; font-size: 1.2rem; }
+    
+    /* タブデザイン */
+    .tab-container { display: flex; margin-bottom: 15px; border-bottom: 2px solid #ddd; }
+    .tab-button { flex: 1; padding: 10px; text-align: center; background: #eee; border: none; font-weight: bold; cursor: pointer; font-size: 14px; }
+    .tab-button.active { background: #007bff; color: white; border-radius: 6px 6px 0 0; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    #reader { width: 100%; border-radius: 8px; overflow: hidden; margin-bottom: 15px; background: #000; min-height: 180px; }
+    .form-group { margin-bottom: 12px; }
+    label { font-weight: bold; display: block; margin-bottom: 4px; font-size: 14px; }
     input[type="text"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
-    button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; }
+    button.submit-btn { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; }
     button:disabled { background: #ccc; }
     #status { margin-top: 15px; font-weight: bold; text-align: center; padding: 10px; border-radius: 4px; display: none; }
     .success { background: #d4edda; color: #155724; }
     .error { background: #f8d7da; color: #721c24; }
     .info { background: #e2e3e5; color: #383d41; }
-    /* 不要なファイル参照ボタンやカメラ選択UIを隠す */
-    #reader__filescan_input, #reader__dashboard_section_csr button { display: none !important; }
+    
+    /* 未返却リストデザイン */
+    .list-item { border-bottom: 1px solid #eee; padding: 10px 0; display: flex; justify-content: space-between; align-items: center; }
+    .list-info { font-size: 13px; color: #555; }
+    .list-title { font-weight: bold; font-size: 15px; color: #333; margin-bottom: 3px; }
+    .return-btn { background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h2>📚 DI室 書籍貸出</h2>
+    <h2>📚 DI室 書籍管理システム</h2>
     
-    <!-- カメラ映像エリア -->
-    <div id="reader"></div>
-    
-    <div class="form-group">
-      <label>ISBN (スキャンまたは入力):</label>
-      <input type="text" id="isbn" placeholder="バーコードを読み取ってください">
+    <!-- タブボタン -->
+    <div class="tab-container">
+      <button class="tab-button active" onclick="switchTab('scanTab')">📚 貸出登録</button>
+      <button class="tab-button" onclick="switchTab('listTab')">📋 未返却一覧</button>
     </div>
 
-    <div class="form-group">
-      <label>書籍名:</label>
-      <input type="text" id="title" readonly placeholder="ISBNを読み込むと表示されます" style="background: #e9ecef;">
+    <!-- タブ1: 貸出登録（スキャン） -->
+    <div id="scanTab" class="tab-content active">
+      <div id="reader"></div>
+      
+      <div class="form-group">
+        <label>ISBN (スキャンまたは入力):</label>
+        <input type="text" id="isbn" placeholder="バーコードを読み取ってください">
+      </div>
+
+      <div class="form-group">
+        <label>書籍名:</label>
+        <input type="text" id="title" readonly placeholder="ISBNを読み込むと表示されます" style="background: #e9ecef;">
+      </div>
+
+      <div class="form-group">
+        <label>借用者氏名:</label>
+        <input type="text" id="borrower" placeholder="氏名を入力してください">
+      </div>
+
+      <button id="submitBtn" class="submit-btn" onclick="submitLoan()" disabled>貸出登録する</button>
     </div>
 
-    <div class="form-group">
-      <label>借用者氏名:</label>
-      <input type="text" id="borrower" placeholder="氏名を入力してください">
+    <!-- タブ2: 未返却一覧 -->
+    <div id="listTab" class="tab-content">
+      <div id="unreturnedList">読み込み中...</div>
     </div>
 
-    <button id="submitBtn" onclick="submitLoan()" disabled>貸出登録する</button>
     <div id="status"></div>
   </div>
 
   <script>
-    // ↓ ご自身のGASのWebアプリURLを設定してください
-    const GAS_URL = "https://script.google.com/a/macros/marianna-u.ac.jp/s/AKfycbxWJF1N6p-kUwl8FCQ8HdbEuNkzT_BOkD2kxmGLKiVmQkJBrHER39GjAIt7pRoEiKoW2w/exec";
+    // ↓ 新しく再デプロイしたGASのWebアプリURLに差し替えてください
+    const GAS_URL = "ここにGASのWebアプリURLを貼り付け";
 
     let html5QrCode;
+
+    // タブ切り替え処理
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      
+      if (tabId === 'scanTab') {
+        document.querySelectorAll('.tab-button')[0].classList.add('active');
+        document.getElementById('scanTab').classList.add('active');
+        startCamera();
+      } else {
+        document.querySelectorAll('.tab-button')[1].classList.add('active');
+        document.getElementById('listTab').classList.add('active');
+        stopCamera();
+        loadUnreturnedList();
+      }
+    }
+
+    // カメラ起動
+    async function startCamera() {
+      if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+      try {
+        await html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 150 } }, onScanSuccess);
+      } catch (err) {}
+    }
+
+    // カメラ停止
+    async function stopCamera() {
+      if (html5QrCode && html5QrCode.isScanning) {
+        await html5QrCode.stop();
+      }
+    }
 
     function onScanSuccess(decodedText) {
       document.getElementById("isbn").value = decodedText;
       searchBook(decodedText);
     }
 
-    // 画面読み込み時に背面カメラ（facingMode: "environment"）を自動起動
-    window.onload = async () => {
-      html5QrCode = new Html5Qrcode("reader");
-      const config = { fps: 10, qrbox: { width: 250, height: 150 } };
-      
-      try {
-        await html5QrCode.start(
-          { facingMode: "environment" }, // 背面カメラを固定指定
-          config,
-          onScanSuccess
-        );
-      } catch (err) {
-        showStatus("カメラの起動に失敗しました。アクセス許可を確認してください。", "error");
-      }
-    };
+    window.onload = () => startCamera();
 
-    // ISBN入力・変更時の処理
     document.getElementById("isbn").addEventListener("change", (e) => searchBook(e.target.value));
 
+    // 書籍検索
     async function searchBook(isbn) {
       if (!isbn) return;
       showStatus("書籍情報を検索中...", "info");
-      
       try {
         const res = await fetch(`${GAS_URL}?action=search&isbn=${encodeURIComponent(isbn)}`);
         const data = await res.json();
-        
         if (data.success) {
           document.getElementById("title").value = data.title;
           document.getElementById("submitBtn").disabled = false;
@@ -101,27 +143,19 @@
       }
     }
 
-    // 貸出登録処理
+    // 貸出登録
     async function submitLoan() {
       const isbn = document.getElementById("isbn").value;
       const title = document.getElementById("title").value;
       const borrower = document.getElementById("borrower").value;
 
-      if (!borrower) {
-        alert("借用者氏名を入力してください");
-        return;
-      }
-
+      if (!borrower) { alert("借用者氏名を入力してください"); return; }
       document.getElementById("submitBtn").disabled = true;
       showStatus("登録中...", "info");
 
       try {
-        const res = await fetch(GAS_URL, {
-          method: "POST",
-          body: JSON.stringify({ isbn, title, borrower })
-        });
+        const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ isbn, title, borrower }) });
         const data = await res.json();
-
         if (data.success) {
           showStatus("貸出登録が完了しました！", "success");
           document.getElementById("isbn").value = "";
@@ -134,6 +168,59 @@
         showStatus("通信エラーが発生しました", "error");
       } finally {
         document.getElementById("submitBtn").disabled = false;
+      }
+    }
+
+    // 未返却一覧の読み込み
+    async function loadUnreturnedList() {
+      const listDiv = document.getElementById("unreturnedList");
+      listDiv.innerHTML = "データを取得中...";
+      
+      try {
+        const res = await fetch(`${GAS_URL}?action=getUnreturned`);
+        const data = await res.json();
+        
+        if (data.success && data.data.length > 0) {
+          listDiv.innerHTML = "";
+          data.data.forEach(item => {
+            const div = document.createElement("div");
+            div.className = "list-item";
+            div.innerHTML = `
+              <div>
+                <div class="list-title">${item.title}</div>
+                <div class="list-info">借用者: <b>${item.borrower}</b> (${item.date})</div>
+              </div>
+              <button class="return-btn" onclick="returnBook(${item.row})">返却</button>
+            `;
+            listDiv.appendChild(div);
+          });
+        } else {
+          listDiv.innerHTML = "<p style='text-align:center;'>現在、未返却の書籍はありません。</p>";
+        }
+      } catch (err) {
+        listDiv.innerHTML = "一覧の取得に失敗しました。";
+      }
+    }
+
+    // 返却処理
+    async function returnBook(row) {
+      if (!confirm("この書籍を返却処理しますか？")) return;
+      showStatus("返却処理中...", "info");
+      
+      try {
+        const res = await fetch(GAS_URL, {
+          method: "POST",
+          body: JSON.stringify({ action: "return", row: row })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showStatus("返却処理が完了しました！", "success");
+          loadUnreturnedList(); // 一覧再読み込み
+        } else {
+          showStatus("返却処理に失敗しました", "error");
+        }
+      } catch (err) {
+        showStatus("通信エラーが発生しました", "error");
       }
     }
 
